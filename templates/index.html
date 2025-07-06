@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
+        h1 { text-align: center; color: #333; }
+        .input-group { display: flex; margin-bottom: 20px; }
+        #url-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #submit-btn { padding: 10px 20px; border: none; background-color: #ff0000; color: white; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+        #submit-btn:hover { background-color: #cc0000; }
+        #error-message { color: red; text-align: center; margin-bottom: 20px; }
+        #video-info { display: none; text-align: center; }
+        #video-info img { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+        #progress-bar-container { display: none; width: 100%; background-color: #f3f3f3; border-radius: 4px; margin-top: 10px; }
+        #progress-bar { width: 0%; height: 20px; background-color: #4caf50; border-radius: 4px; text-align: center; color: white; line-height: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Downloader</h1>
+        <div class="input-group">
+            <input type="text" id="url-input" placeholder="Masukkan URL YouTube">
+            <button id="submit-btn">Dapatkan Info Video</button>
+        </div>
+        <div id="error-message"></div>
+        <div id="video-info">
+            <h2 id="video-title"></h2>
+            <img id="thumbnail" src="" alt="Video Thumbnail">
+            <div>
+                <label for="quality-select">Pilih Kualitas Video:</label>
+                <select id="quality-select"></select>
+                <button id="download-video-btn">Unduh Video</button>
+            </div>
+            <div style="margin-top: 10px;">
+                <label for="audio-quality-select">Pilih Kualitas Audio:</label>
+                <select id="audio-quality-select"></select>
+                <button id="download-audio-btn">Unduh Audio</button>
+            </div>
+        </div>
+        <div id="progress-bar-container">
+            <div id="progress-bar">0%</div>
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('url-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const errorMessage = document.getElementById('error-message');
+        const videoInfoDiv = document.getElementById('video-info');
+        const videoTitle = document.getElementById('video-title');
+        const thumbnail = document.getElementById('thumbnail');
+        const qualitySelect = document.getElementById('quality-select');
+        const audioQualitySelect = document.getElementById('audio-quality-select');
+        const downloadVideoBtn = document.getElementById('download-video-btn');
+        const downloadAudioBtn = document.getElementById('download-audio-btn');
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        const progressBar = document.getElementById('progress-bar');
+
+        submitBtn.addEventListener('click', async () => {
+            const url = urlInput.value;
+            errorMessage.textContent = '';
+            videoInfoDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/get_video_info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    videoTitle.textContent = data.title;
+                    thumbnail.src = data.thumbnail_url;
+                    
+                    qualitySelect.innerHTML = '';
+                    data.video_qualities.forEach(q => {
+                        const option = new Option(`${q.resolution}`, q.itag);
+                        qualitySelect.add(option);
+                    });
+
+                    audioQualitySelect.innerHTML = '';
+                    data.audio_qualities.forEach(q => {
+                        const option = new Option(`${q.abr}`, q.itag);
+                        audioQualitySelect.add(option);
+                    });
+                    
+                    videoInfoDiv.style.display = 'block';
+                } else {
+                    errorMessage.textContent = data.error;
+                }
+            } catch (error) {
+                errorMessage.textContent = 'Terjadi kesalahan pada server.';
+            }
+        });
+
+        const startDownload = (itag) => {
+            const url = urlInput.value;
+            progressBarContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            
+            // Simulasi progress, karena progress nyata dari download file sulit dilacak di frontend
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 5;
+                if (progress <= 100) {
+                    progressBar.style.width = progress + '%';
+                    progressBar.textContent = progress + '%';
+                } else {
+                    clearInterval(interval);
+                }
+            }, 500);
+
+            window.location.href = `/download?url=${encodeURIComponent(url)}&itag=${itag}`;
+        };
+
+        downloadVideoBtn.addEventListener('click', () => {
+            startDownload(qualitySelect.value);
+        });
+
+        downloadAudioBtn.addEventListener('click', () => {
+            startDownload(audioQualitySelect.value);
+        });
+
+    </script>
+</body>
+</html>
