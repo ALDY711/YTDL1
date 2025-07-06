@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); width: 100%; max-width: 600px; }
+        h1 { text-align: center; color: #343a40; }
+        .input-group { display: flex; margin-bottom: 20px; }
+        #url-input { flex-grow: 1; padding: 12px; border: 1px solid #ced4da; border-radius: 4px 0 0 4px; font-size: 1rem; }
+        #submit-btn { padding: 12px 20px; border: none; background-color: #ff0000; color: white; border-radius: 0 4px 4px 0; cursor: pointer; font-weight: bold; }
+        #submit-btn:hover { background-color: #cc0000; }
+        #submit-btn:disabled { background-color: #aaa; }
+        #error-message { color: #dc3545; text-align: center; margin-bottom: 20px; font-weight: 500; }
+        #video-info { display: none; text-align: center; border-top: 1px solid #e9ecef; padding-top: 20px; }
+        #video-info img { max-width: 100%; border-radius: 8px; margin-bottom: 15px; }
+        .download-section { margin-top: 15px; }
+        .download-section select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; margin: 0 10px; }
+        .download-section button { padding: 8px 15px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .download-section button:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Downloader 🚀</h1>
+        <div class="input-group">
+            <input type="text" id="url-input" placeholder="Tempel URL YouTube di sini">
+            <button id="submit-btn">Dapatkan Info</button>
+        </div>
+        <div id="error-message"></div>
+        <div id="video-info">
+            <h2 id="video-title"></h2>
+            <img id="thumbnail" src="" alt="Video Thumbnail">
+            <div class="download-section">
+                <label for="quality-select">Kualitas Video:</label>
+                <select id="quality-select"></select>
+                <button id="download-video-btn">Unduh Video</button>
+            </div>
+            <div class="download-section">
+                <label for="audio-quality-select">Kualitas Audio:</label>
+                <select id="audio-quality-select"></select>
+                <button id="download-audio-btn">Unduh Audio</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('url-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const errorMessage = document.getElementById('error-message');
+        const videoInfoDiv = document.getElementById('video-info');
+        const videoTitle = document.getElementById('video-title');
+        const thumbnail = document.getElementById('thumbnail');
+        const qualitySelect = document.getElementById('quality-select');
+        const audioQualitySelect = document.getElementById('audio-quality-select');
+        const downloadVideoBtn = document.getElementById('download-video-btn');
+        const downloadAudioBtn = document.getElementById('download-audio-btn');
+
+        // Untuk menyimpan data URL unduhan
+        let videoData = {};
+
+        submitBtn.addEventListener('click', async () => {
+            const url = urlInput.value;
+            if (!url) {
+                errorMessage.textContent = 'Silakan masukkan URL YouTube.';
+                return;
+            }
+
+            // Reset UI
+            errorMessage.textContent = '';
+            videoInfoDiv.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Memuat...';
+
+            try {
+                // Perhatikan path API yang baru
+                const response = await fetch('/api/get_video_info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    videoData = data; // Simpan semua data
+                    videoTitle.textContent = data.title;
+                    thumbnail.src = data.thumbnail_url;
+                    
+                    qualitySelect.innerHTML = '';
+                    data.video_qualities.forEach((q, index) => {
+                        const option = new Option(q.resolution, index);
+                        qualitySelect.add(option);
+                    });
+
+                    audioQualitySelect.innerHTML = '';
+                    data.audio_qualities.forEach((q, index) => {
+                        const option = new Option(q.abr, index);
+                        audioQualitySelect.add(option);
+                    });
+                    
+                    videoInfoDiv.style.display = 'block';
+                } else {
+                    errorMessage.textContent = data.error;
+                }
+            } catch (error) {
+                errorMessage.textContent = 'Gagal terhubung ke server. Coba lagi nanti.';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Dapatkan Info';
+            }
+        });
+
+        const startDownload = (downloadUrl, filename) => {
+             // Membuat link sementara untuk mengunduh dan menamainya
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.setAttribute('download', filename); // Menentukan nama file
+            link.setAttribute('target', '_blank'); // Buka di tab baru untuk keandalan
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        downloadVideoBtn.addEventListener('click', () => {
+            const selectedIndex = qualitySelect.value;
+            const selectedVideo = videoData.video_qualities[selectedIndex];
+            startDownload(selectedVideo.url, selectedVideo.filename);
+        });
+
+        downloadAudioBtn.addEventListener('click', () => {
+            const selectedIndex = audioQualitySelect.value;
+            const selectedAudio = videoData.audio_qualities[selectedIndex];
+            startDownload(selectedAudio.url, selectedAudio.filename);
+        });
+    </script>
+</body>
+</html>
