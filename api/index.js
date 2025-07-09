@@ -12,43 +12,59 @@ app.post('/api/video-info', async (req, res) => {
   try {
     const { url } = req.body;
     
+    if (!url) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    
     if (!ytdl.validateURL(url)) {
       return res.status(400).json({ error: 'URL YouTube tidak valid' });
     }
     
     const info = await ytdl.getInfo(url);
     
-    const formats = info.formats
+    // Filter format yang memiliki video dan audio
+    const videoFormats = info.formats
       .filter(format => format.hasVideo && format.hasAudio)
       .map(format => ({
         quality: format.qualityLabel || format.quality,
         itag: format.itag,
         container: format.container,
         url: format.url,
-        audioOnly: !format.hasVideo
-      }));
+        audioOnly: false
+      }))
+      .sort((a, b) => {
+        // Sorting berdasarkan kualitas
+        const qualityOrder = ['144p', '240p', '360p', '480p', '720p', '1080p', '1440p', '2160p'];
+        return qualityOrder.indexOf(b.quality) - qualityOrder.indexOf(a.quality);
+      });
       
+    // Filter format audio saja
     const audioFormats = info.formats
       .filter(format => !format.hasVideo && format.hasAudio)
       .map(format => ({
-        quality: 'audio only',
+        quality: 'Audio only',
         itag: format.itag,
         container: format.container,
         url: format.url,
         audioOnly: true
-      }));
+      }))
+      .slice(0, 3); // Ambil 3 format audio terbaik
       
-    const allFormats = [...formats, ...audioFormats];
+    const allFormats = [...videoFormats, ...audioFormats];
     
     res.json({
       title: info.videoDetails.title,
       thumbnail: info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
-      formats: allFormats
+      formats: allFormats,
+      duration: info.videoDetails.lengthSeconds,
+      viewCount: info.videoDetails.viewCount
     });
     
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan info video: ' + error.message });
+    console.error('Error getting video info:', error);
+    res.status(500).json({ 
+      error: 'Gagal mendapatkan info video. Pastikan URL valid dan video dapat diakses.' 
+    });
   }
 });
 
@@ -57,27 +73,56 @@ app.get('/api/download', async (req, res) => {
   try {
     const { url, itag } = req.query;
     
+    if (!url || !itag) {
+      return res.status(400).json({ error: 'URL dan itag diperlukan' });
+    }
+    
     if (!ytdl.validateURL(url)) {
-      return res.status(400).send('URL YouTube tidak valid');
+      return res.status(400).json({ error: 'URL YouTube tidak valid' });
     }
     
     const info = await ytdl.getInfo(url);
-    const format = ytdl.chooseFormat(info.formats, { quality: itag });
+    const format = info.formats.find(f => f.itag == itag);
     
-    res.header('Content-Disposition', `attachment; filename="${info.videoDetails.title}.${format.container}"`);
+    if (!format) {
+      return res.status(400).json({ error: 'Format tidak ditemukan' });
+    }
     
-    ytdl(url, { quality: itag }).pipe(res);
+    // Bersihkan nama file dari karakter yang tidak diizinkan
+    const cleanTitle = info.videoDetails.title.replace(/[^\w\s-]/g, '').trim();
+    const fileName = `${cleanTitle}.${format.container}`;
+    
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', format.mimeType || 'video/mp4');
+    
+    const stream = ytdl(url, { quality: itag });
+    
+    stream.on('error', (error) => {
+      console.error('Stream error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Gagal mengunduh video' });
+      }
+    });
+    
+    stream.pipe(res);
     
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).send('Gagal mengunduh video: ' + error.message);
+    console.error('Download error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Gagal mengunduh video' });
+    }
   }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // Handler error
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).send('Terjadi kesalahan pada server');
+  res.status(500).json({ error: 'Terjadi kesalahan pada server' });
 });
 
 const PORT = process.env.PORT || 3001;
